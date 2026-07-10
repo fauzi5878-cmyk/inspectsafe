@@ -18,21 +18,49 @@ button{border:0;font-weight:bold;margin-top:12px}
 .export{background:#1455d9;color:white}
 .report{background:#6b3fd1;color:white}
 .clear{background:#b00020;color:white}
-.whatsapp{background:#25D366;color:white}
 .card{border:1px solid #ddd;border-radius:12px;padding:12px;margin-top:12px;background:#fafafa}
 .small{font-size:13px;color:#666}
 .preview{max-width:100%;border-radius:8px;margin-top:8px}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-@media print{
-  .no-print{display:none!important}
-  body{background:white}
-  .container{max-width:none;padding:0}
-  .card{break-inside:avoid}
-}
-table{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px}
-th,td{border:1px solid #999;padding:6px;text-align:left;vertical-align:top}
+table{width:100%;border-collapse:collapse;margin-top:12px;font-size:12px;table-layout:fixed}
+th,td{border:1px solid #777;padding:5px;text-align:left;vertical-align:top;word-break:break-word}
 th{background:#f0f0f0}
 .badge{display:inline-block;padding:4px 8px;border-radius:12px;background:#eee;margin:2px}
+.report-title{text-align:center;margin:4px 0 12px}
+.report-meta{font-size:12px;line-height:1.5;margin-bottom:10px}
+.photo-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.photo-card{border:1px solid #777;padding:8px;break-inside:avoid;page-break-inside:avoid;background:#fff}
+.photo-card img{display:block;width:100%;height:190px;object-fit:contain;margin-top:6px;border:1px solid #bbb}
+.photo-caption{font-size:11px;line-height:1.35;margin-top:4px}
+.signature-grid{display:grid;grid-template-columns:1fr 1fr;gap:50px;margin-top:35px}
+.signature-box{min-height:75px;border-top:1px solid #333;padding-top:5px;font-size:12px}
+.report-table col.no{width:4%}
+.report-table col.date{width:8%}
+.report-table col.location{width:9%}
+.report-table col.category{width:9%}
+.report-table col.finding{width:20%}
+.report-table col.action{width:23%}
+.report-table col.pic{width:9%}
+.report-table col.due{width:9%}
+.report-table col.status{width:9%}
+@page{size:A4 landscape;margin:10mm}
+@media print{
+  .no-print{display:none!important}
+  body{background:white!important;margin:0}
+  .container{max-width:none!important;min-height:auto;padding:0!important;margin:0!important}
+  #output{width:100%}
+  .report-title{font-size:18px;margin-top:0}
+  .report-meta{font-size:10px}
+  table{font-size:9px;margin-top:6px}
+  th,td{padding:3px}
+  thead{display:table-header-group}
+  tr{break-inside:avoid;page-break-inside:avoid}
+  .photo-grid{grid-template-columns:1fr 1fr;gap:7mm}
+  .photo-card{break-inside:avoid!important;page-break-inside:avoid!important}
+  .photo-card img{height:58mm;object-fit:contain}
+  h3{break-after:avoid;page-break-after:avoid}
+  .signature-grid{break-inside:avoid;page-break-inside:avoid}
+}
 </style>
 </head>
 <body>
@@ -191,57 +219,7 @@ function renderRecords(){
  <p><b>Action:</b><br>${esc(r.action||"-")}</p>
  <p><b>PIC:</b> ${esc(r.pic||"-")}<br><b>Due:</b> ${esc(r.due||"-")}</p>
  ${r.photo?`<img class="preview" src="${r.photo}">`:""}
- <button class="whatsapp no-print" onclick="sendWhatsApp(${i})">📱 SEND WHATSAPP</button>
  </div>`).join("");
-}
-
-
-function sendWhatsApp(index){
- const r=records[index];
- if(!r){alert("Record not found.");return;}
-
- let phone=prompt("Enter PIC WhatsApp number\\nExample: 60123456789");
- if(phone===null)return;
-
- phone=phone.replace(/\D/g,"");
- if(phone.startsWith("0"))phone="60"+phone.slice(1);
-
- if(!phone || phone.length<10){
-   alert("Please enter a valid WhatsApp number. Example: 60123456789");
-   return;
- }
-
- const dueText=r.due ? formatDateForMessage(r.due) : "-";
- const inspectionText=r.inspectionDate ? formatDateForMessage(r.inspectionDate) : "-";
-
- const message=`🚨 *INSPECTION FINDING*
-
-*Inspection Date:* ${inspectionText}
-*Location:* ${r.location}
-*Category:* ${r.category}
-
-*Finding / Concern:*
-${r.finding}
-
-*Recommendation / Action Plan:*
-${r.action||"-"}
-
-*PIC / Department:* ${r.pic||"-"}
-*Due Date:* ${dueText}
-*Status:* ${r.status}
-
-Please take the necessary corrective action and provide completion evidence.
-
-_Reported via InspectSafe_`;
-
- const url="https://wa.me/"+phone+"?text="+encodeURIComponent(message);
- window.open(url,"_blank");
-}
-
-function formatDateForMessage(value){
- const parts=String(value||"").split("-");
- if(parts.length!==3)return value||"-";
- return `${parts[2]}/${parts[1]}/${parts[0]}`;
 }
 
 function exportCSV(){
@@ -261,21 +239,38 @@ function generateWorkplaceReport(){
  <td>${esc(r.finding)}</td><td>${esc(r.action||"-")}</td><td>${esc(r.pic||"-")}</td><td>${esc(r.due||"-")}</td><td>${esc(r.status)}</td>
  </tr>`).join("");
  const photos=records.filter(r=>r.photo).map((r,i)=>`
- <div class="card"><b>Photo ${i+1}: ${esc(r.location)} - ${esc(r.category)}</b><br>
- <span class="small">${esc(r.finding)}</span><br><img class="preview" src="${r.photo}"></div>`).join("");
+ <div class="photo-card">
+   <b>Photo ${i+1}: ${esc(r.location)} — ${esc(r.category)}</b>
+   <div class="photo-caption"><b>Finding:</b> ${esc(r.finding)}</div>
+   <img src="${r.photo}" alt="Inspection photo ${i+1}">
+ </div>`).join("");
  document.getElementById("output").innerHTML=`
- <div class="no-print"><button class="export" onclick="window.print()">PRINT / SAVE AS PDF</button><button onclick="location.reload()">BACK</button></div>
- <h2>WORKPLACE INSPECTION REPORT</h2>
- <p><b>Company:</b> ${esc(company)}<br>
- <b>Report Generated:</b> ${new Date().toLocaleString()}<br>
- <b>Total Findings:</b> ${records.length}</p>
- <table>
- <tr><th>No</th><th>Date</th><th>Location</th><th>Category</th><th>Concern</th><th>Recommendation / Action Plan</th><th>PIC</th><th>Due Date</th><th>Status</th></tr>
- ${rows}
+ <div class="no-print">
+   <button class="export" onclick="window.print()">PRINT / SAVE AS PDF</button>
+   <button onclick="location.reload()">BACK</button>
+ </div>
+ <h2 class="report-title">WORKPLACE INSPECTION / AUDIT REPORT</h2>
+ <div class="report-meta">
+   <b>Company:</b> ${esc(company)}<br>
+   <b>Report Generated:</b> ${new Date().toLocaleString()}<br>
+   <b>Total Findings:</b> ${records.length}
+ </div>
+ <table class="report-table">
+ <colgroup>
+   <col class="no"><col class="date"><col class="location"><col class="category">
+   <col class="finding"><col class="action"><col class="pic"><col class="due"><col class="status">
+ </colgroup>
+ <thead>
+ <tr><th>No</th><th>Date</th><th>Location</th><th>Category</th><th>Hazard / Finding</th><th>Recommended Corrective Action</th><th>Person Responsible</th><th>Target Date</th><th>Status</th></tr>
+ </thead>
+ <tbody>${rows}</tbody>
  </table>
- <h3>Photo Evidence</h3>${photos||"<p>No photo attached.</p>"}
- <h3>Prepared By</h3>
- <p>Safety & Health Officer</p>`;
+ <h3>Photo Evidence</h3>
+ <div class="photo-grid">${photos||"<p>No photo attached.</p>"}</div>
+ <div class="signature-grid">
+   <div class="signature-box"><b>Prepared By (Inspector)</b><br>Name / Signature / Date</div>
+   <div class="signature-box"><b>Reviewed & Verified By</b><br>Name / Signature / Date</div>
+ </div>`;
 }
 
 function generateSHOReport(){
