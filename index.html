@@ -18,6 +18,7 @@ button{border:0;font-weight:bold;margin-top:12px}
 .export{background:#1455d9;color:white}
 .report{background:#6b3fd1;color:white}
 .clear{background:#b00020;color:white}
+.whatsapp{background:#25D366;color:white}
 .card{border:1px solid #ddd;border-radius:12px;padding:12px;margin-top:12px;background:#fafafa}
 .small{font-size:13px;color:#666}
 .preview{max-width:100%;border-radius:8px;margin-top:8px}
@@ -190,7 +191,57 @@ function renderRecords(){
  <p><b>Action:</b><br>${esc(r.action||"-")}</p>
  <p><b>PIC:</b> ${esc(r.pic||"-")}<br><b>Due:</b> ${esc(r.due||"-")}</p>
  ${r.photo?`<img class="preview" src="${r.photo}">`:""}
+ <button class="whatsapp no-print" onclick="sendWhatsApp(${i})">📱 SEND WHATSAPP</button>
  </div>`).join("");
+}
+
+
+function sendWhatsApp(index){
+ const r=records[index];
+ if(!r){alert("Record not found.");return;}
+
+ let phone=prompt("Enter PIC WhatsApp number\\nExample: 60123456789");
+ if(phone===null)return;
+
+ phone=phone.replace(/\D/g,"");
+ if(phone.startsWith("0"))phone="60"+phone.slice(1);
+
+ if(!phone || phone.length<10){
+   alert("Please enter a valid WhatsApp number. Example: 60123456789");
+   return;
+ }
+
+ const dueText=r.due ? formatDateForMessage(r.due) : "-";
+ const inspectionText=r.inspectionDate ? formatDateForMessage(r.inspectionDate) : "-";
+
+ const message=`🚨 *INSPECTION FINDING*
+
+*Inspection Date:* ${inspectionText}
+*Location:* ${r.location}
+*Category:* ${r.category}
+
+*Finding / Concern:*
+${r.finding}
+
+*Recommendation / Action Plan:*
+${r.action||"-"}
+
+*PIC / Department:* ${r.pic||"-"}
+*Due Date:* ${dueText}
+*Status:* ${r.status}
+
+Please take the necessary corrective action and provide completion evidence.
+
+_Reported via InspectSafe_`;
+
+ const url="https://wa.me/"+phone+"?text="+encodeURIComponent(message);
+ window.open(url,"_blank");
+}
+
+function formatDateForMessage(value){
+ const parts=String(value||"").split("-");
+ if(parts.length!==3)return value||"-";
+ return `${parts[2]}/${parts[1]}/${parts[0]}`;
 }
 
 function exportCSV(){
