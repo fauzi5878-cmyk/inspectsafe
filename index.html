@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HSE Inspection & SHO Report App</title>
+<style>
+body{font-family:Arial,sans-serif;margin:0;background:#eef1f5;color:#222}
+.container{max-width:900px;margin:auto;background:white;min-height:100vh;padding:18px}
+h1{margin:0 0 6px;font-size:24px}
+h2{margin-top:24px}
+.sub{color:#666;margin-bottom:16px}
+label{display:block;font-weight:bold;margin-top:14px;margin-bottom:6px;font-size:17px}
+input,select,textarea,button{width:100%;box-sizing:border-box;font-size:16px;padding:12px;border:1px solid #bbb;border-radius:9px;background:white}
+textarea{min-height:90px}
+button{border:0;font-weight:bold;margin-top:12px}
+.save{background:#087a35;color:white}
+.export{background:#1455d9;color:white}
+.report{background:#6b3fd1;color:white}
+.clear{background:#b00020;color:white}
+.card{border:1px solid #ddd;border-radius:12px;padding:12px;margin-top:12px;background:#fafafa}
+.small{font-size:13px;color:#666}
+.preview{max-width:100%;border-radius:8px;margin-top:8px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media print{
+  .no-print{display:none!important}
+  body{background:white}
+  .container{max-width:none;padding:0}
+  .card{break-inside:avoid}
+}
+table{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px}
+th,td{border:1px solid #999;padding:6px;text-align:left;vertical-align:top}
+th{background:#f0f0f0}
+.badge{display:inline-block;padding:4px 8px;border-radius:12px;background:#eee;margin:2px}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="no-print">
+<h1>HSE Inspection & SHO Report App</h1>
+<div class="sub">One-time data entry for Workplace Inspection and Monthly SHO Report</div>
+
+<label>Company / Site</label>
+<input id="company" type="text" value="Linocraft Printers Sdn. Bhd.">
+
+<div class="row">
+<div>
+<label>Inspection Date</label>
+<input id="inspectionDate" type="date">
+</div>
+<div>
+<label>Month for SHO Report</label>
+<input id="reportMonth" type="month">
+</div>
+</div>
+
+<label>Location</label>
+<select id="location">
+<option>Block A</option><option>Block B</option><option>Block C</option><option>Block D</option><option>Block E</option>
+<option>Warehouse</option><option>Printing</option><option>Facility</option><option>Loading Bay</option><option>Chemical Store</option><option>Other</option>
+</select>
+
+<label>Category</label>
+<select id="category">
+<option>Housekeeping</option><option>Fire Safety</option><option>Chemical Safety</option><option>Forklift Safety</option>
+<option>Electrical Safety</option><option>Machine Safety</option><option>Environment</option><option>Emergency Preparedness</option><option>Other</option>
+</select>
+
+<label>Finding / Concern</label>
+<textarea id="finding" placeholder="Example: Fire extinguisher blocked by material."></textarea>
+
+<label>Recommendation / Action Plan</label>
+<textarea id="action" placeholder="Example: Remove obstruction immediately and brief area PIC."></textarea>
+
+<div class="row">
+<div>
+<label>PIC / Department</label>
+<input id="pic" type="text" placeholder="Example: Facility / Production">
+</div>
+<div>
+<label>Due Date</label>
+<input id="due" type="date">
+</div>
+</div>
+
+<label>Status</label>
+<select id="status"><option>Open</option><option>In Progress</option><option>Closed</option></select>
+
+<label>Photo</label>
+<div class="row">
+<input id="camera" type="file" accept="image/*" capture="environment">
+<input id="gallery" type="file" accept="image/*">
+</div>
+<div class="small">Left: Camera | Right: Gallery</div>
+<img id="photoPreview" class="preview" style="display:none">
+
+<button class="save" onclick="saveRecord()">SAVE FINDING</button>
+<button class="export" onclick="exportCSV()">EXPORT MASTER DATA CSV</button>
+<button class="report" onclick="generateWorkplaceReport()">GENERATE WORKPLACE INSPECTION REPORT</button>
+<button class="report" onclick="generateSHOReport()">GENERATE SHO MONTHLY REPORT</button>
+<button class="clear" onclick="clearAll()">CLEAR ALL RECORDS</button>
+</div>
+
+<div id="output">
+<h2>Saved Records</h2>
+<div id="summary" class="small"></div>
+<div id="records"></div>
+</div>
+</div>
+
+<script>
+let photoData="";
+let records=[];
+
+function today(){
+ const d=new Date();
+ return d.toISOString().slice(0,10);
+}
+function monthNow(){
+ const d=new Date();
+ return d.toISOString().slice(0,7);
+}
+document.getElementById("inspectionDate").value=today();
+document.getElementById("reportMonth").value=monthNow();
+
+function loadRecords(){
+  try{records=JSON.parse(localStorage.getItem("hse_records_report")||"[]");}
+  catch(e){records=[];}
+  renderRecords();
+}
+function handlePhoto(input){
+  const file=input.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    photoData=e.target.result;
+    const img=document.getElementById("photoPreview");
+    img.src=photoData; img.style.display="block";
+  };
+  reader.readAsDataURL(file);
+}
+document.getElementById("camera").addEventListener("change",e=>handlePhoto(e.target));
+document.getElementById("gallery").addEventListener("change",e=>handlePhoto(e.target));
+
+function saveRecord(){
+  const finding=document.getElementById("finding").value.trim();
+  if(!finding){alert("Please type Finding / Concern.");document.getElementById("finding").focus();return;}
+  const r={
+    dateSaved:new Date().toLocaleString(),
+    inspectionDate:document.getElementById("inspectionDate").value,
+    month:document.getElementById("reportMonth").value,
+    location:document.getElementById("location").value,
+    category:document.getElementById("category").value,
+    finding:finding,
+    action:document.getElementById("action").value.trim(),
+    pic:document.getElementById("pic").value.trim(),
+    due:document.getElementById("due").value,
+    status:document.getElementById("status").value,
+    photo:photoData
+  };
+  records.unshift(r);
+  try{localStorage.setItem("hse_records_report",JSON.stringify(records));}
+  catch(e){alert("Phone storage full. Try save without photo.");}
+  document.getElementById("finding").value="";
+  document.getElementById("action").value="";
+  document.getElementById("pic").value="";
+  document.getElementById("camera").value="";
+  document.getElementById("gallery").value="";
+  document.getElementById("photoPreview").style.display="none";
+  photoData="";
+  renderRecords();
+  alert("Finding saved. It can now be used for Workplace Inspection and Monthly SHO Report.");
+}
+
+function renderRecords(){
+ const total=records.length;
+ const open=records.filter(r=>r.status==="Open").length;
+ const progress=records.filter(r=>r.status==="In Progress").length;
+ const closed=records.filter(r=>r.status==="Closed").length;
+ document.getElementById("summary").innerHTML=`Total: ${total} | Open: ${open} | In Progress: ${progress} | Closed: ${closed}`;
+ if(!records.length){
+   document.getElementById("records").innerHTML="<p class='small'>No saved records yet.</p>";
+   return;
+ }
+ document.getElementById("records").innerHTML=records.map((r,i)=>`
+ <div class="card">
+ <b>${i+1}. ${esc(r.location)} - ${esc(r.category)}</b><br>
+ <span class="small">Inspection: ${esc(r.inspectionDate)} | Status: ${esc(r.status)}</span>
+ <p><b>Finding:</b><br>${esc(r.finding)}</p>
+ <p><b>Action:</b><br>${esc(r.action||"-")}</p>
+ <p><b>PIC:</b> ${esc(r.pic||"-")}<br><b>Due:</b> ${esc(r.due||"-")}</p>
+ ${r.photo?`<img class="preview" src="${r.photo}">`:""}
+ </div>`).join("");
+}
+
+function exportCSV(){
+ if(!records.length){alert("No records to export.");return;}
+ const header=["No","Date Saved","Inspection Date","Month","Location","Category","Finding","Recommendation / Action Plan","PIC","Due Date","Status"];
+ const rows=records.map((r,i)=>[i+1,r.dateSaved,r.inspectionDate,r.month,r.location,r.category,r.finding,r.action,r.pic,r.due,r.status]);
+ const csv=[header,...rows].map(row=>row.map(c=>`"${String(c||"").replace(/"/g,'""')}"`).join(",")).join("\n");
+ downloadText(csv,"HSE_Master_Data.csv","text/csv");
+}
+
+function generateWorkplaceReport(){
+ if(!records.length){alert("No records available.");return;}
+ const company=document.getElementById("company").value;
+ const rows=records.map((r,i)=>`
+ <tr>
+ <td>${i+1}</td><td>${esc(r.inspectionDate)}</td><td>${esc(r.location)}</td><td>${esc(r.category)}</td>
+ <td>${esc(r.finding)}</td><td>${esc(r.action||"-")}</td><td>${esc(r.pic||"-")}</td><td>${esc(r.due||"-")}</td><td>${esc(r.status)}</td>
+ </tr>`).join("");
+ const photos=records.filter(r=>r.photo).map((r,i)=>`
+ <div class="card"><b>Photo ${i+1}: ${esc(r.location)} - ${esc(r.category)}</b><br>
+ <span class="small">${esc(r.finding)}</span><br><img class="preview" src="${r.photo}"></div>`).join("");
+ document.getElementById("output").innerHTML=`
+ <div class="no-print"><button class="export" onclick="window.print()">PRINT / SAVE AS PDF</button><button onclick="location.reload()">BACK</button></div>
+ <h2>WORKPLACE INSPECTION REPORT</h2>
+ <p><b>Company:</b> ${esc(company)}<br>
+ <b>Report Generated:</b> ${new Date().toLocaleString()}<br>
+ <b>Total Findings:</b> ${records.length}</p>
+ <table>
+ <tr><th>No</th><th>Date</th><th>Location</th><th>Category</th><th>Concern</th><th>Recommendation / Action Plan</th><th>PIC</th><th>Due Date</th><th>Status</th></tr>
+ ${rows}
+ </table>
+ <h3>Photo Evidence</h3>${photos||"<p>No photo attached.</p>"}
+ <h3>Prepared By</h3>
+ <p>Safety & Health Officer</p>`;
+}
+
+function generateSHOReport(){
+ if(!records.length){alert("No records available.");return;}
+ const company=document.getElementById("company").value;
+ const month=document.getElementById("reportMonth").value;
+ const selected=records.filter(r=>!month || r.month===month || (r.inspectionDate||"").startsWith(month));
+ const data=selected.length?selected:records;
+ const total=data.length;
+ const open=data.filter(r=>r.status==="Open").length;
+ const progress=data.filter(r=>r.status==="In Progress").length;
+ const closed=data.filter(r=>r.status==="Closed").length;
+ const categories={};
+ data.forEach(r=>categories[r.category]=(categories[r.category]||0)+1);
+ const catHtml=Object.keys(categories).map(k=>`<span class="badge">${esc(k)}: ${categories[k]}</span>`).join(" ");
+ const advice = open>0 ? 
+ "Management attention is required to ensure all open findings are closed within the agreed due date. PIC shall provide evidence of completion and update the SHO accordingly." :
+ "All recorded findings for the selected month have been closed. Continue monitoring and maintain good workplace conditions.";
+ const rows=data.map((r,i)=>`
+ <tr><td>${i+1}</td><td>${esc(r.location)}</td><td>${esc(r.category)}</td><td>${esc(r.finding)}</td><td>${esc(r.action||"-")}</td><td>${esc(r.pic||"-")}</td><td>${esc(r.status)}</td></tr>`).join("");
+ document.getElementById("output").innerHTML=`
+ <div class="no-print"><button class="export" onclick="window.print()">PRINT / SAVE AS PDF</button><button onclick="location.reload()">BACK</button></div>
+ <h2>SHO MONTHLY REPORT - WORKPLACE INSPECTION SUMMARY</h2>
+ <p><b>Company:</b> ${esc(company)}<br>
+ <b>Month:</b> ${esc(month||"-")}<br>
+ <b>Report Generated:</b> ${new Date().toLocaleString()}</p>
+ <h3>1. Summary of Inspection Findings</h3>
+ <p>Total Findings: <b>${total}</b><br>
+ Open: <b>${open}</b> | In Progress: <b>${progress}</b> | Closed: <b>${closed}</b></p>
+ <p>${catHtml}</p>
+ <h3>2. Method of Establishing and Maintaining Safe and Healthy Working Conditions</h3>
+ <p>Workplace inspections were conducted to identify unsafe acts and unsafe conditions. Findings were recorded with recommendation, PIC, due date and status for follow-up action.</p>
+ <h3>3. Items, Concern and Recommendation / Action Plan</h3>
+ <table>
+ <tr><th>No</th><th>Location</th><th>Item</th><th>Concern</th><th>Recommendation / Action Plan</th><th>PIC</th><th>Status</th></tr>
+ ${rows}
+ </table>
+ <h3>4. Management Advice</h3>
+ <p>${esc(advice)}</p>
+ <h3>5. Conclusion</h3>
+ <p>Follow-up action shall be monitored until closure. Evidence of completion should be maintained for audit and SHO record purposes.</p>
+ <h3>Prepared By</h3>
+ <p>Safety & Health Officer</p>`;
+}
+
+function downloadText(text, filename, type){
+ const blob=new Blob([text],{type:type});
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement("a");a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url);
+}
+function clearAll(){
+ if(confirm("Delete all saved records?")){
+   records=[];localStorage.removeItem("hse_records_report");renderRecords();
+ }
+}
+function esc(t){return String(t||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));}
+loadRecords();
+</script>
+</body>
+</html>
