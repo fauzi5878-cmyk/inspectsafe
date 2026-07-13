@@ -6,7 +6,19 @@ function today(){return new Date().toISOString().slice(0,10)}
 function monthNow(){return new Date().toISOString().slice(0,7)}
 
 document.getElementById("inspectionDate").value=today();
+
 document.getElementById("reportMonth").value=monthNow();
+
+function initializeMasterData(){
+  const picSelect=document.getElementById("pic");
+  picSelect.innerHTML='<option value="">Select PIC / Department</option>'+
+    MASTER_PIC.map(p=>`<option value="${p.id}">${esc(p.name)}${p.department&&p.department!==p.name?` - ${esc(p.department)}`:""}</option>`).join("");
+
+  const groupSelect=document.getElementById("whatsappGroup");
+  groupSelect.innerHTML='<option value="">No WhatsApp group</option>'+
+    MASTER_GROUPS.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join("");
+}
+initializeMasterData();
 
 function setCloudStatus(text,isError=false){
   const el=document.getElementById("cloudStatus");
@@ -80,6 +92,19 @@ function renderPhotoPreviews(){
 document.getElementById("camera").addEventListener("change",e=>readFiles(e.target.files));
 document.getElementById("gallery").addEventListener("change",e=>readFiles(e.target.files));
 
+
+async function generateFindingNumber(){
+  const year=new Date().getFullYear();
+  const counterRef=db.collection("counters").doc("finding_"+year);
+
+  return db.runTransaction(async transaction=>{
+    const snap=await transaction.get(counterRef);
+    const next=snap.exists?(Number(snap.data().lastNumber||0)+1):1;
+    transaction.set(counterRef,{lastNumber:next,updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});
+    return `HSE-${year}-${String(next).padStart(4,"0")}`;
+  });
+}
+
 async function saveRecord(){
   const findingEl=document.getElementById("finding");
   const finding=findingEl.value.trim();
@@ -89,7 +114,23 @@ async function saveRecord(){
   saveButton.disabled=true;
   saveButton.textContent="SAVING TO CLOUD...";
 
+  const selectedPicId=document.getElementById("pic").value;
+  const selectedPic=MASTER_PIC.find(p=>p.id===selectedPicId)||{name:"",department:"",phone:""};
+  const selectedGroupId=document.getElementById("whatsappGroup").value;
+  const selectedGroup=MASTER_GROUPS.find(g=>g.id===selectedGroupId)||{name:"",link:""};
+
+  if(!selectedPicId){
+    alert("Please select PIC / Department.");
+    document.getElementById("pic").focus();
+    saveButton.disabled=false;
+    saveButton.textContent="SAVE FINDING";
+    return;
+  }
+
+  const findingNo=await generateFindingNumber();
+
   const r={
+    findingNo,
     dateSaved:new Date().toLocaleString(),
     inspectionDate:document.getElementById("inspectionDate").value,
     month:document.getElementById("reportMonth").value,
@@ -97,7 +138,11 @@ async function saveRecord(){
     category:document.getElementById("category").value,
     finding,
     action:document.getElementById("action").value.trim(),
-    pic:document.getElementById("pic").value.trim(),
+    pic:selectedPic.name,
+    picDepartment:selectedPic.department,
+    picPhone:selectedPic.phone,
+    whatsappGroup:selectedGroup.name,
+    whatsappGroupLink:selectedGroup.link,
     due:document.getElementById("due").value,
     status:document.getElementById("status").value,
     createdAt:firebase.firestore.FieldValue.serverTimestamp()
@@ -121,6 +166,7 @@ function resetForm(){
   document.getElementById("finding").value="";
   document.getElementById("action").value="";
   document.getElementById("pic").value="";
+  document.getElementById("whatsappGroup").value="";
   document.getElementById("due").value="";
   document.getElementById("camera").value="";
   document.getElementById("gallery").value="";
@@ -140,23 +186,24 @@ function renderRecords(){
   document.getElementById("records").innerHTML=records.length
     ?records.map((r,i)=>`
       <div class="card">
-        <b>${i+1}. ${esc(r.location)} - ${esc(r.category)}</b><br>
+        <b>${i+1}. ${esc(r.findingNo||r.id||"-")} — ${esc(r.location)} - ${esc(r.category)}</b><br>
         <span class="small">Inspection: ${esc(r.inspectionDate)} | Status: ${esc(r.status)}</span>
         <p><b>Finding:</b><br>${esc(r.finding)}</p>
         <p><b>Action:</b><br>${esc(r.action||"-")}</p>
         <p><b>PIC:</b> ${esc(r.pic||"-")}<br><b>Due:</b> ${esc(r.due||"-")}</p>
         ${(r.photos||[]).length?`<div class="photo-grid">${r.photos.map(p=>`<img src="${p}" alt="Finding photo">`).join("")}</div>`:""}
-        <button class="whatsapp no-print" onclick="sendWhatsApp(${i})">📱 SEND WHATSAPP</button>
+        <button class="whatsapp no-print" onclick="sendWhatsApp(${i})">📱 SEND TO PIC</button>
+        ${r.whatsappGroupLink?`<button class="whatsapp no-print" onclick="sendToWhatsAppGroup(${i})">👥 OPEN ${esc(r.whatsappGroup||"WHATSAPP GROUP")}</button>`:""}
       </div>`).join("")
     :"<p class='small'>No saved records yet.</p>";
 }
 
 function exportCSV(){
   if(!records.length){alert("No records to export.");return}
-  const h=["No","Document ID","Date Saved","Inspection Date","Month","Location","Category","Finding","Action","PIC","Due Date","Status"];
+  const h=["No","Finding No","Document ID","Date Saved","Inspection Date","Month","Location","Category","Finding","Action","PIC","PIC Phone","WhatsApp Group","Due Date","Status"];
   const rows=records.map((r,i)=>[
-    i+1,r.id||"",r.dateSaved,r.inspectionDate,r.month,r.location,r.category,
-    r.finding,r.action,r.pic,r.due,r.status
+    i+1,r.findingNo||"",r.id||"",r.dateSaved,r.inspectionDate,r.month,r.location,r.category,
+    r.finding,r.action,r.pic,r.picPhone||"",r.whatsappGroup||"",r.due,r.status
   ]);
   const csv=[h,...rows].map(row=>
     row.map(c=>`"${String(c||"").replace(/"/g,'""')}"`).join(",")
