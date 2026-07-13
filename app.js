@@ -9,16 +9,26 @@ document.getElementById("inspectionDate").value=today();
 
 document.getElementById("reportMonth").value=monthNow();
 
-function initializeMasterData(){
+function populatePicOptions(){
+  const locationValue=document.getElementById("location").value;
   const picSelect=document.getElementById("pic");
-  if(!picSelect){console.error("PIC dropdown not found in index.html");return;}
-  picSelect.innerHTML='<option value="">Select PIC / Department</option>'+
-    MASTER_PIC.map(p=>`<option value="${p.id}">${esc(p.name)}${p.department&&p.department!==p.name?` - ${esc(p.department)}`:""}</option>`).join("");
+  const matches=MASTER_PIC.filter(p=>p.location===locationValue);
 
+  picSelect.innerHTML='<option value="">Select PIC</option>'+
+    matches.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("");
+
+  if(!matches.length){
+    picSelect.innerHTML='<option value="">No PIC registered for this location</option>';
+  }
+}
+
+function initializeMasterData(){
   const groupSelect=document.getElementById("whatsappGroup");
-  if(!groupSelect){console.error("WhatsApp group dropdown not found in index.html");return;}
   groupSelect.innerHTML='<option value="">No WhatsApp group</option>'+
     MASTER_GROUPS.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join("");
+
+  document.getElementById("location").addEventListener("change",populatePicOptions);
+  populatePicOptions();
 }
 initializeMasterData();
 
