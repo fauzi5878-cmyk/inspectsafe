@@ -1,1 +1,197 @@
-let photoDataList=[];let records=[];function today(){return new Date().toISOString().slice(0,10)}function monthNow(){return new Date().toISOString().slice(0,7)}document.getElementById("inspectionDate").value=today();document.getElementById("reportMonth").value=monthNow();function loadRecords(){try{records=JSON.parse(localStorage.getItem("hse_records_report")||"[]").map(r=>({...r,photos:Array.isArray(r.photos)?r.photos:(r.photo?[r.photo]:[])}))}catch(e){records=[]}renderRecords()}function readFiles(files){const selected=[...files].slice(0,4);photoDataList=[];if(!selected.length){renderPhotoPreviews();return}let done=0;selected.forEach(file=>{const reader=new FileReader();reader.onload=e=>{photoDataList.push(e.target.result);done++;if(done===selected.length)renderPhotoPreviews()};reader.readAsDataURL(file)})}function renderPhotoPreviews(){document.getElementById("photoPreviewWrap").innerHTML=photoDataList.map(src=>`<img src="${src}">`).join("")}document.getElementById("camera").addEventListener("change",e=>readFiles(e.target.files));document.getElementById("gallery").addEventListener("change",e=>readFiles(e.target.files));function saveRecord(){const finding=document.getElementById("finding").value.trim();if(!finding){alert("Please type Finding / Concern.");return}const r={id:"INS-"+Date.now(),dateSaved:new Date().toLocaleString(),inspectionDate:inspectionDate.value,month:reportMonth.value,location:location.value,category:category.value,finding,action:action.value.trim(),pic:pic.value.trim(),due:due.value,status:status.value,photos:[...photoDataList]};records.unshift(r);try{localStorage.setItem("hse_records_report",JSON.stringify(records))}catch(e){alert("Phone storage full. Try fewer photos.");records.shift();return}finding.value="";action.value="";pic.value="";due.value="";camera.value="";gallery.value="";photoDataList=[];renderPhotoPreviews();renderRecords();alert("Finding saved.")}function renderRecords(){summary.innerHTML=`Total: ${records.length} | Open: ${records.filter(r=>r.status==="Open").length} | In Progress: ${records.filter(r=>r.status==="In Progress").length} | Closed: ${records.filter(r=>r.status==="Closed").length}`;recordsDiv=records.length?records.map((r,i)=>`<div class="card"><b>${i+1}. ${esc(r.location)} - ${esc(r.category)}</b><br><span class="small">Inspection: ${esc(r.inspectionDate)} | Status: ${esc(r.status)}</span><p><b>Finding:</b><br>${esc(r.finding)}</p><p><b>Action:</b><br>${esc(r.action||"-")}</p><p><b>PIC:</b> ${esc(r.pic||"-")}<br><b>Due:</b> ${esc(r.due||"-")}</p>${(r.photos||[]).length?`<div class="photo-grid">${r.photos.map(p=>`<img src="${p}">`).join("")}</div>`:""}<button class="whatsapp no-print" onclick="sendWhatsApp(${i})">📱 SEND WHATSAPP</button></div>`).join(""):"<p class='small'>No saved records yet.</p>";document.getElementById("records").innerHTML=recordsDiv}function exportCSV(){if(!records.length){alert("No records to export.");return}const h=["No","ID","Date Saved","Inspection Date","Month","Location","Category","Finding","Action","PIC","Due Date","Status"];const rows=records.map((r,i)=>[i+1,r.id||"",r.dateSaved,r.inspectionDate,r.month,r.location,r.category,r.finding,r.action,r.pic,r.due,r.status]);const csv=[h,...rows].map(row=>row.map(c=>`"${String(c||"").replace(/"/g,'""')}"`).join(",")).join("\n");downloadText(csv,"HSE_Master_Data.csv","text/csv")}function downloadText(text,filename,type){const blob=new Blob([text],{type});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=filename;a.click();URL.revokeObjectURL(url)}function clearAll(){if(confirm("Delete all saved records?")){records=[];localStorage.removeItem("hse_records_report");renderRecords()}}function esc(t){return String(t||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}loadRecords();
+let photoDataList=[];
+let records=[];
+let unsubscribeCloud=null;
+
+function today(){return new Date().toISOString().slice(0,10)}
+function monthNow(){return new Date().toISOString().slice(0,7)}
+
+document.getElementById("inspectionDate").value=today();
+document.getElementById("reportMonth").value=monthNow();
+
+function setCloudStatus(text,isError=false){
+  const el=document.getElementById("cloudStatus");
+  el.textContent=text;
+  el.style.color=isError?"#b00020":"#087a35";
+}
+
+function localPhotoKey(id){return "inspectsafe_photos_"+id}
+
+function getLocalPhotos(id){
+  try{return JSON.parse(localStorage.getItem(localPhotoKey(id))||"[]")}
+  catch(e){return []}
+}
+
+function saveLocalPhotos(id,photos){
+  if(!photos.length)return;
+  try{localStorage.setItem(localPhotoKey(id),JSON.stringify(photos))}
+  catch(e){alert("Photo not saved locally because phone storage is full.")}
+}
+
+function loadRecords(){
+  setCloudStatus("Connecting to Firestore...");
+  if(unsubscribeCloud)unsubscribeCloud();
+
+  unsubscribeCloud=inspectionsRef.onSnapshot(snapshot=>{
+    records=snapshot.docs
+      .map(doc=>{
+        const data=doc.data();
+        return {
+          id:doc.id,
+          ...data,
+          photos:getLocalPhotos(doc.id)
+        };
+      })
+      .filter(r=>!r.test)
+      .sort((a,b)=>{
+        const at=a.createdAt&&a.createdAt.toMillis?a.createdAt.toMillis():0;
+        const bt=b.createdAt&&b.createdAt.toMillis?b.createdAt.toMillis():0;
+        return bt-at;
+      });
+
+    renderRecords();
+    setCloudStatus("☁️ Cloud connected — records are synchronized.");
+  },error=>{
+    console.error(error);
+    setCloudStatus("Cloud connection failed: "+error.message,true);
+  });
+}
+
+function readFiles(files){
+  const selected=[...files].slice(0,4);
+  photoDataList=[];
+  if(!selected.length){renderPhotoPreviews();return}
+  let done=0;
+  selected.forEach(file=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      photoDataList.push(e.target.result);
+      done++;
+      if(done===selected.length)renderPhotoPreviews();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderPhotoPreviews(){
+  document.getElementById("photoPreviewWrap").innerHTML=
+    photoDataList.map(src=>`<img src="${src}" alt="Photo preview">`).join("");
+}
+
+document.getElementById("camera").addEventListener("change",e=>readFiles(e.target.files));
+document.getElementById("gallery").addEventListener("change",e=>readFiles(e.target.files));
+
+async function saveRecord(){
+  const findingEl=document.getElementById("finding");
+  const finding=findingEl.value.trim();
+  if(!finding){alert("Please type Finding / Concern.");findingEl.focus();return}
+
+  const saveButton=document.querySelector(".save");
+  saveButton.disabled=true;
+  saveButton.textContent="SAVING TO CLOUD...";
+
+  const r={
+    dateSaved:new Date().toLocaleString(),
+    inspectionDate:document.getElementById("inspectionDate").value,
+    month:document.getElementById("reportMonth").value,
+    location:document.getElementById("location").value,
+    category:document.getElementById("category").value,
+    finding,
+    action:document.getElementById("action").value.trim(),
+    pic:document.getElementById("pic").value.trim(),
+    due:document.getElementById("due").value,
+    status:document.getElementById("status").value,
+    createdAt:firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  try{
+    const doc=await inspectionsRef.add(r);
+    saveLocalPhotos(doc.id,[...photoDataList]);
+    resetForm();
+    alert("Finding saved to Firestore cloud.");
+  }catch(error){
+    console.error(error);
+    alert("Cloud save failed: "+error.message);
+  }finally{
+    saveButton.disabled=false;
+    saveButton.textContent="SAVE FINDING";
+  }
+}
+
+function resetForm(){
+  document.getElementById("finding").value="";
+  document.getElementById("action").value="";
+  document.getElementById("pic").value="";
+  document.getElementById("due").value="";
+  document.getElementById("camera").value="";
+  document.getElementById("gallery").value="";
+  photoDataList=[];
+  renderPhotoPreviews();
+}
+
+function renderRecords(){
+  const total=records.length;
+  const open=records.filter(r=>r.status==="Open").length;
+  const progress=records.filter(r=>r.status==="In Progress").length;
+  const closed=records.filter(r=>r.status==="Closed").length;
+
+  document.getElementById("summary").innerHTML=
+    `Total: ${total} | Open: ${open} | In Progress: ${progress} | Closed: ${closed}`;
+
+  document.getElementById("records").innerHTML=records.length
+    ?records.map((r,i)=>`
+      <div class="card">
+        <b>${i+1}. ${esc(r.location)} - ${esc(r.category)}</b><br>
+        <span class="small">Inspection: ${esc(r.inspectionDate)} | Status: ${esc(r.status)}</span>
+        <p><b>Finding:</b><br>${esc(r.finding)}</p>
+        <p><b>Action:</b><br>${esc(r.action||"-")}</p>
+        <p><b>PIC:</b> ${esc(r.pic||"-")}<br><b>Due:</b> ${esc(r.due||"-")}</p>
+        ${(r.photos||[]).length?`<div class="photo-grid">${r.photos.map(p=>`<img src="${p}" alt="Finding photo">`).join("")}</div>`:""}
+        <button class="whatsapp no-print" onclick="sendWhatsApp(${i})">📱 SEND WHATSAPP</button>
+      </div>`).join("")
+    :"<p class='small'>No saved records yet.</p>";
+}
+
+function exportCSV(){
+  if(!records.length){alert("No records to export.");return}
+  const h=["No","Document ID","Date Saved","Inspection Date","Month","Location","Category","Finding","Action","PIC","Due Date","Status"];
+  const rows=records.map((r,i)=>[
+    i+1,r.id||"",r.dateSaved,r.inspectionDate,r.month,r.location,r.category,
+    r.finding,r.action,r.pic,r.due,r.status
+  ]);
+  const csv=[h,...rows].map(row=>
+    row.map(c=>`"${String(c||"").replace(/"/g,'""')}"`).join(",")
+  ).join("\n");
+  downloadText(csv,"HSE_Master_Data_Cloud.csv","text/csv");
+}
+
+function downloadText(text,filename,type){
+  const blob=new Blob([text],{type});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download=filename;a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function clearAll(){
+  if(!confirm("Delete ALL cloud inspection records? This affects every device."))return;
+  try{
+    const snapshot=await inspectionsRef.get();
+    const batch=db.batch();
+    snapshot.docs.forEach(doc=>{
+      if(!doc.data().test)batch.delete(doc.ref);
+      localStorage.removeItem(localPhotoKey(doc.id));
+    });
+    await batch.commit();
+    alert("All inspection records deleted.");
+  }catch(error){
+    alert("Delete failed: "+error.message);
+  }
+}
+
+function esc(t){
+  return String(t||"").replace(/[&<>"']/g,m=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+  }[m]));
+}
+
+loadRecords();
