@@ -1,0 +1,1 @@
+function generateWorkplaceReport(){alert("Report module ready. Existing report design can be added next.")}function generateSHOReport(){alert("SHO report module ready. Existing report design can be added next.")}
