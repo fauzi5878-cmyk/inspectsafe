@@ -11,10 +11,12 @@ document.getElementById("reportMonth").value=monthNow();
 
 function initializeMasterData(){
   const picSelect=document.getElementById("pic");
+  if(!picSelect){console.error("PIC dropdown not found in index.html");return;}
   picSelect.innerHTML='<option value="">Select PIC / Department</option>'+
     MASTER_PIC.map(p=>`<option value="${p.id}">${esc(p.name)}${p.department&&p.department!==p.name?` - ${esc(p.department)}`:""}</option>`).join("");
 
   const groupSelect=document.getElementById("whatsappGroup");
+  if(!groupSelect){console.error("WhatsApp group dropdown not found in index.html");return;}
   groupSelect.innerHTML='<option value="">No WhatsApp group</option>'+
     MASTER_GROUPS.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join("");
 }
